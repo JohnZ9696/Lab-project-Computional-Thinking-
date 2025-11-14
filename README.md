@@ -1,5 +1,5 @@
 
-## 📋 Requirment của project
+## Requirment của project
 
 - **Node.js** version 16.0 trở lên (khuyến nghị 18.x hoặc 20.x)
 - **npm** version 7.0 trở lên (đi kèm với Node.js)
