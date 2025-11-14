@@ -91,3 +91,4 @@ Kiểm tra kết nối Internet và console log trong DevTools để xem lỗi A
 ## Repository
 
 GitHub: https://github.com/JohnZ9696/Lab-project-Computional-Thinking-.git
+Project made by: Nguyễn Minh Đức (MSSV: 24127345)
