@@ -30,9 +30,50 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedPoiId, setSelectedPoiId] = useState(null);
+  const [weather, setWeather] = useState(null);
+  const [lastSearchParams, setLastSearchParams] = useState(null);
   const mapRef = useRef(null);
 
+  const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY || 'your_api_key_here';
+
   const highlightedCities = ['Hà Nội', 'Đà Nẵng', 'Hội An', 'Huế', 'Sài Gòn'];
+
+  const fetchWeather = async (lat, lon, locationName) => {
+    try {
+      const weatherResponse = await axios.get(
+        'https://api.openweathermap.org/data/2.5/weather',
+        {
+          params: {
+            lat: lat,
+            lon: lon,
+            appid: OPENWEATHER_API_KEY,
+            units: 'metric',
+            lang: 'vi'
+          }
+        }
+      );
+      
+      const capitalizeLocationName = (name) => {
+        return name
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+      };
+      
+      setWeather({
+        temp: Math.round(weatherResponse.data.main.temp),
+        feelsLike: Math.round(weatherResponse.data.main.feels_like),
+        humidity: weatherResponse.data.main.humidity,
+        description: weatherResponse.data.weather[0].description,
+        icon: weatherResponse.data.weather[0].icon,
+        windSpeed: weatherResponse.data.wind.speed,
+        locationName: capitalizeLocationName(locationName)
+      });
+    } catch (weatherError) {
+      console.error('Weather API error:', weatherError);
+      setWeather(null);
+    }
+  };
 
   const performSearch = async (query) => {
     if (!query.trim()) {
@@ -44,6 +85,7 @@ function App() {
     setError('');
     setPointsOfInterest([]);
     setSelectedPoiId(null);
+    setWeather(null);
 
     try {
       const geocodeResponse = await axios.get(
@@ -70,12 +112,23 @@ function App() {
       const mainLocation = geocodeResponse.data[0];
       const { lat, lon, address } = mainLocation;
       
-      const isProvince = address?.state && 
+      // Kiểm tra xem có phải địa điểm ở Việt Nam không
+      const country = address?.country || mainLocation.display_name;
+      if (!country.toLowerCase().includes('vietnam') && 
+          !country.toLowerCase().includes('việt nam') && 
+          !country.toLowerCase().includes('viet nam')) {
+        setError('Chỉ tìm kiếm địa điểm trong Việt Nam. Vui lòng thử lại.');
+        setLoading(false);
+        return;
+      }
+      
+      const isProvince = (address?.state || address?.historic) && 
                         (mainLocation.type === 'administrative' || 
+                         mainLocation.type === 'historic' ||
                          mainLocation.class === 'boundary' ||
                          !address?.city);
       
-      const provinceName = address?.state || address?.province || address?.county;
+      const provinceName = address?.state || address?.historic || address?.province || address?.county;
       console.log(`Searching in province: ${provinceName}, isProvince: ${isProvince}`);
       
       setMapCenter([parseFloat(lat), parseFloat(lon)]);
@@ -106,7 +159,7 @@ function App() {
         if (uniquePOIs.length >= 5) break;
         
         const name = poi.display_name.split(',')[0];
-        const poiProvince = poi.address?.state || poi.address?.province || poi.address?.county;
+        const poiProvince = poi.address?.state || poi.address?.historic || poi.address?.province || poi.address?.county;
         
         const isValidProvince = !isProvince || !provinceName || poiProvince === provinceName;
         
@@ -182,7 +235,7 @@ function App() {
             if (uniquePOIs.length >= 5) break;
             
             const name = poi.display_name.split(',')[0];
-            const poiProvince = poi.address?.state || poi.address?.province || poi.address?.county;
+            const poiProvince = poi.address?.state || poi.address?.historic || poi.address?.province || poi.address?.county;
             
             const isValidProvince = !isProvince || !provinceName || poiProvince === provinceName;
             
@@ -267,12 +320,27 @@ function App() {
       if (uniquePOIs.length === 0) {
         setError('Không tìm thấy điểm tham quan trong khu vực này. Vui lòng thử tỉnh/thành phố khác.');
         setPointsOfInterest([]);
+        setWeather(null);
+        setLastSearchParams(null);
       } else {
         setPointsOfInterest(uniquePOIs);
         setSelectedPoiId(uniquePOIs[0]?.id || null);
+        
+        setLastSearchParams({
+          query,
+          mainLocation,
+          lat: parseFloat(lat),
+          lon: parseFloat(lon),
+          isProvince,
+          provinceName,
+          searchRadius,
+          seenNames: Array.from(seenNames)
+        });
+        
         if (uniquePOIs.length < 5) {
           setError(`Tìm thấy ${uniquePOIs.length} điểm tham quan trong khu vực này.`);
         }
+        fetchWeather(parseFloat(lat), parseFloat(lon), query);
       }
 
     } catch (err) {
@@ -291,6 +359,73 @@ function App() {
   const handleSuggestionClick = (city) => {
     setLocation(city);
     performSearch(city);
+  };
+
+  const loadMorePOIs = async () => {
+    if (!lastSearchParams) return;
+    
+    setLoading(true);
+    try {
+      const { lat, lon, isProvince, provinceName, seenNames: existingNames } = lastSearchParams;
+      const seenNames = new Set(existingNames);
+      const newPOIs = [];
+      
+      const expandedRadius = isProvince ? 0.25 : 0.1;
+      
+      const morePoiResponse = await axios.get(
+        `https://nominatim.openstreetmap.org/search`,
+        {
+          params: {
+            q: 'tourism|attraction|museum|restaurant|hotel|temple|pagoda|church|market|beach|park|cafe',
+            format: 'json',
+            limit: 100,
+            bounded: 1,
+            viewbox: `${lon - expandedRadius},${lat - expandedRadius},${lon + expandedRadius},${lat + expandedRadius}`,
+            addressdetails: 1
+          },
+          headers: {
+            'User-Agent': 'POI-Finder-Vietnam-App'
+          }
+        }
+      );
+
+      for (const poi of morePoiResponse.data) {
+        if (newPOIs.length >= 5) break;
+        
+        const name = poi.display_name.split(',')[0];
+        const poiProvince = poi.address?.state || poi.address?.province || poi.address?.county;
+        const isValidProvince = !isProvince || !provinceName || poiProvince === provinceName;
+        
+        if (!seenNames.has(name) && poi.lat && poi.lon && isValidProvince) {
+          seenNames.add(name);
+          newPOIs.push({
+            id: poi.place_id,
+            name: name,
+            fullName: poi.display_name,
+            lat: parseFloat(poi.lat),
+            lon: parseFloat(poi.lon),
+            type: poi.type || 'attraction'
+          });
+        }
+      }
+
+      if (newPOIs.length > 0) {
+        const updatedPOIs = [...pointsOfInterest, ...newPOIs];
+        setPointsOfInterest(updatedPOIs);
+        setLastSearchParams({
+          ...lastSearchParams,
+          seenNames: Array.from(seenNames)
+        });
+        setError(`Đã thêm ${newPOIs.length} điểm tham quan mới. Tổng: ${updatedPOIs.length} địa điểm.`);
+      } else {
+        setError('Không tìm thấy thêm điểm tham quan nào trong khu vực này.');
+      }
+    } catch (err) {
+      console.error('Error loading more POIs:', err);
+      setError('Đã xảy ra lỗi khi tải thêm địa điểm.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePoiClick = (poi) => {
@@ -344,6 +479,38 @@ function App() {
           </div>
 
           {error && <div className="error-message">{error}</div>}
+          
+          {weather && (
+            <div className="weather-card">
+              <div className="weather-location-name">{weather.locationName}</div>
+              <div className="weather-header">
+                <img 
+                  src={`https://openweathermap.org/img/wn/${weather.icon}@2x.png`}
+                  alt={weather.description}
+                  className="weather-icon"
+                />
+                <div className="weather-temp">
+                  <span className="temp-value">{weather.temp}°C</span>
+                  <span className="weather-desc">{weather.description}</span>
+                </div>
+              </div>
+              <div className="weather-details">
+                <div className="weather-item">
+                  <span className="weather-label">Cảm giác:</span>
+                  <span className="weather-value">{weather.feelsLike}°C</span>
+                </div>
+                <div className="weather-item">
+                  <span className="weather-label">Độ ẩm:</span>
+                  <span className="weather-value">{weather.humidity}%</span>
+                </div>
+                <div className="weather-item">
+                  <span className="weather-label">Gió:</span>
+                  <span className="weather-value">{weather.windSpeed} m/s</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {pointsOfInterest.length > 0 && (
             <div className="poi-count">
               Đã tìm thấy {pointsOfInterest.length} điểm tham quan
