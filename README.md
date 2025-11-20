@@ -33,21 +33,43 @@ Lệnh này sẽ cài đặt tất cả các package cần thiết:
 - react-leaflet 5.0.0
 - axios 1.13.2
 
-### 3. Chạy development server
+### 3. Cấu hình API Key cho OpenWeather (Bắt buộc)
+
+**⚠️ QUAN TRỌNG:** Ứng dụng cần OpenWeather API key để hiển thị thông tin thời tiết.
+
+1. **Đăng ký tài khoản miễn phí tại:** https://openweathermap.org/api
+2. **Lấy API Key** từ trang dashboard
+3. **Tạo file `.env`** trong thư mục gốc của project:
+   ```bash
+   touch .env
+   ```
+4. **Thêm API key vào file `.env`:**
+   ```
+   VITE_OPENWEATHER_API_KEY=your_api_key_here
+   ```
+   
+   Thay `your_api_key_here` bằng API key thực tế của bạn.
+
+**Lưu ý:** 
+- File `.env` không được commit lên Git (đã có trong `.gitignore`)
+- API key miễn phí có giới hạn 1,000 calls/ngày
+- Sau khi tạo API key, cần đợi vài phút để key được kích hoạt
+
+### 4. Chạy development server
 ```bash
 npm run dev
 ```
 
 Ứng dụng sẽ chạy tại `http://localhost:5173` (hoặc port khác nếu 5173 đã được sử dụng)
 
-### 4. Build cho production (tùy chọn)
+### 5. Build cho production (tùy chọn)
 ```bash
 npm run build
 ```
 
 File build sẽ được tạo trong thư mục `dist/`
 
-### 5. Preview production build (tùy chọn)
+### 6. Preview production build (tùy chọn)
 ```bash
 npm run preview
 ```
@@ -76,6 +98,12 @@ npm run preview
 rm -rf node_modules package-lock.json
 npm install
 ```
+
+### Không hiển thị thông tin thời tiết
+- Kiểm tra file `.env` đã tồn tại và có đúng API key chưa
+- Đảm bảo tên biến là `VITE_OPENWEATHER_API_KEY`
+- Restart development server sau khi thêm/sửa file `.env`
+- Kiểm tra API key đã được kích hoạt trên OpenWeather (đợi 10-15 phút sau khi đăng ký)
 
 ### Port 5173 đã được sử dụng
 Vite sẽ tự động chọn port khác. Kiểm tra terminal để xem port đang dùng.
