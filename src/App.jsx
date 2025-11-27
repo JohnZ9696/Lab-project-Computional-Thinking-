@@ -32,11 +32,74 @@ function App() {
   const [selectedPoiId, setSelectedPoiId] = useState(null);
   const [weather, setWeather] = useState(null);
   const [lastSearchParams, setLastSearchParams] = useState(null);
+  const [showTranslator, setShowTranslator] = useState(false);
+  const [sourceText, setSourceText] = useState('');
+  const [targetText, setTargetText] = useState('');
+  const [translating, setTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState('');
+  const [direction, setDirection] = useState('en-vi'); // 'en-vi' hoặc 'vi-en'
   const mapRef = useRef(null);
 
   const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY || 'your_api_key_here';
 
   const highlightedCities = ['Hà Nội', 'Đà Nẵng', 'Hội An', 'Huế', 'Sài Gòn'];
+
+  const translateText = async () => {
+    if (!sourceText.trim()) {
+      setTranslationError('Vui lòng nhập văn bản cần dịch');
+      return;
+    }
+
+    setTranslating(true);
+    setTranslationError('');
+    setTargetText('');
+
+    try {
+      const [sourceLang, targetLang] = direction.split('-');
+      
+      // Sử dụng Google Translate API (free endpoint)
+      const response = await axios.post(
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t`,
+        null,
+        {
+          params: {
+            q: sourceText
+          }
+        }
+      );
+
+      if (response.data && response.data[0]) {
+        // Google Translate trả về mảng các đoạn dịch
+        const translatedText = response.data[0]
+          .map(item => item[0])
+          .join('');
+        
+        setTargetText(translatedText);
+      } else {
+        throw new Error('Invalid response');
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+      setTranslationError('Không thể dịch văn bản. Vui lòng thử lại.');
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  const swapLanguages = () => {
+    setDirection(direction === 'en-vi' ? 'vi-en' : 'en-vi');
+    setSourceText(targetText);
+    setTargetText(sourceText);
+    setTranslationError('');
+  };
+
+  const handleTranslatorClose = () => {
+    setShowTranslator(false);
+    setSourceText('');
+    setTargetText('');
+    setTranslationError('');
+    setDirection('en-vi');
+  };
 
   const fetchWeather = async (lat, lon, locationName) => {
     try {
@@ -446,6 +509,13 @@ function App() {
       <header className="header">
         <div className="header-content">
           <div className="hero-label">Khám phá Việt Nam</div>
+          <button 
+            className="translator-toggle-btn"
+            onClick={() => setShowTranslator(true)}
+            title="Mở công cụ dịch thuật"
+          >
+            🌐 Dịch thuật
+          </button>
           <h1>Tìm Điểm Tham Quan Việt Nam</h1>
           <p className="hero-subtitle">
             Nhập tên thành phố hoặc tỉnh thành, hệ thống sẽ gợi ý những điểm check-in nổi bật gần bạn.
@@ -587,6 +657,80 @@ function App() {
           </MapContainer>
         </section>
       </main>
+
+      {showTranslator && (
+        <div className="translator-overlay" onClick={handleTranslatorClose}>
+          <div className="translator-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="translator-header">
+              <h3>
+                {direction === 'en-vi' ? 'Dịch Anh → Việt' : 'Dịch Việt → Anh'}
+              </h3>
+              <button 
+                className="translator-close-btn"
+                onClick={handleTranslatorClose}
+                aria-label="Đóng"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="translator-body">
+              <div className="translator-section">
+                <label htmlFor="source-input" className="translator-label">
+                  {direction === 'en-vi' ? 'Tiếng Anh' : 'Tiếng Việt'}
+                </label>
+                <textarea
+                  id="source-input"
+                  className="translator-textarea"
+                  value={sourceText}
+                  onChange={(e) => setSourceText(e.target.value)}
+                  placeholder={direction === 'en-vi' ? 'Nhập văn bản tiếng Anh...' : 'Nhập văn bản tiếng Việt...'}
+                  rows="4"
+                  disabled={translating}
+                />
+              </div>
+
+              <div className="translator-controls">
+                <button 
+                  className="swap-btn"
+                  onClick={swapLanguages}
+                  disabled={translating}
+                  title="Đổi chiều dịch"
+                >
+                  ⇅
+                </button>
+                <button 
+                  className="translate-btn"
+                  onClick={translateText}
+                  disabled={translating || !sourceText.trim()}
+                >
+                  {translating ? 'Đang dịch...' : '→ Dịch'}
+                </button>
+              </div>
+
+              <div className="translator-section">
+                <label htmlFor="target-output" className="translator-label">
+                  {direction === 'en-vi' ? 'Tiếng Việt' : 'Tiếng Anh'}
+                </label>
+                <textarea
+                  id="target-output"
+                  className="translator-textarea"
+                  value={targetText}
+                  readOnly
+                  placeholder="Bản dịch sẽ hiển thị ở đây..."
+                  rows="4"
+                />
+              </div>
+
+              {translationError && (
+                <div className="translation-error">
+                  {translationError}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
