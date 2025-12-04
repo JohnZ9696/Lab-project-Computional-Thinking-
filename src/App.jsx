@@ -1,9 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import axios from 'axios';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import './App.css';
+import AuthModal from './AuthModal';
+import './AuthModal.css';
+import { auth, onAuthStateChanged } from './firebase';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -38,7 +41,17 @@ function App() {
   const [translating, setTranslating] = useState(false);
   const [translationError, setTranslationError] = useState('');
   const [direction, setDirection] = useState('en-vi'); // 'en-vi' hoặc 'vi-en'
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [user, setUser] = useState(null);
   const mapRef = useRef(null);
+
+  // Lắng nghe trạng thái đăng nhập
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY || 'your_api_key_here';
 
@@ -509,13 +522,40 @@ function App() {
       <header className="header">
         <div className="header-content">
           <div className="hero-label">Khám phá Việt Nam</div>
-          <button 
-            className="translator-toggle-btn"
-            onClick={() => setShowTranslator(true)}
-            title="Mở công cụ dịch thuật"
-          >
-            🌐 Dịch thuật
-          </button>
+          
+          {/* Header Buttons - Auth & Translator */}
+          <div className="header-buttons">
+            <button 
+              className="auth-btn"
+              onClick={() => setShowAuthModal(true)}
+            >
+              {user ? (
+                <>
+                  {user.photoURL ? (
+                    <span className="user-avatar-small">
+                      <img src={user.photoURL} alt="Avatar" />
+                    </span>
+                  ) : (
+                    <span className="user-initial">
+                      {(user.displayName || user.email || 'U')[0].toUpperCase()}
+                    </span>
+                  )}
+                  {user.displayName || 'Tài khoản'}
+                </>
+              ) : (
+                <>👤 Đăng nhập</>
+              )}
+            </button>
+            
+            <button 
+              className="translator-toggle-btn"
+              onClick={() => setShowTranslator(true)}
+              title="Mở công cụ dịch thuật"
+            >
+              🌐 Dịch thuật
+            </button>
+          </div>
+
           <h1>Tìm Điểm Tham Quan Việt Nam</h1>
           <p className="hero-subtitle">
             Nhập tên thành phố hoặc tỉnh thành, hệ thống sẽ gợi ý những điểm check-in nổi bật gần bạn.
@@ -731,6 +771,14 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        user={user}
+        onUserChange={setUser}
+      />
     </div>
   );
 }
