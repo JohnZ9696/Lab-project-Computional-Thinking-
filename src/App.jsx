@@ -54,6 +54,7 @@ function App() {
   }, []);
 
   const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY || 'your_api_key_here';
+  const BACKEND_API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:8000';
 
   const highlightedCities = ['Hà Nội', 'Đà Nẵng', 'Hội An', 'Huế', 'Sài Gòn'];
 
@@ -70,30 +71,55 @@ function App() {
     try {
       const [sourceLang, targetLang] = direction.split('-');
       
-      // Sử dụng Google Translate API (free endpoint)
+      // Gọi Backend API với HuggingFace
       const response = await axios.post(
-        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t`,
-        null,
+        `${BACKEND_API_URL}/translate`,
         {
-          params: {
-            q: sourceText
+          text: sourceText,
+          source_lang: sourceLang,
+          target_lang: targetLang
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
           }
         }
       );
 
-      if (response.data && response.data[0]) {
-        // Google Translate trả về mảng các đoạn dịch
-        const translatedText = response.data[0]
-          .map(item => item[0])
-          .join('');
-        
-        setTargetText(translatedText);
+      if (response.data && response.data.translated_text) {
+        setTargetText(response.data.translated_text);
       } else {
-        throw new Error('Invalid response');
+        throw new Error('Invalid response from translation API');
       }
     } catch (err) {
       console.error('Translation error:', err);
-      setTranslationError('Không thể dịch văn bản. Vui lòng thử lại.');
+      
+      // Fallback về Google Translate nếu backend lỗi
+      console.log('Falling back to Google Translate...');
+      try {
+        const [sourceLang, targetLang] = direction.split('-');
+        const response = await axios.post(
+          `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t`,
+          null,
+          {
+            params: {
+              q: sourceText
+            }
+          }
+        );
+
+        if (response.data && response.data[0]) {
+          const translatedText = response.data[0]
+            .map(item => item[0])
+            .join('');
+          setTargetText(translatedText);
+        } else {
+          throw new Error('Invalid response');
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback translation error:', fallbackErr);
+        setTranslationError('Không thể dịch văn bản. Vui lòng kiểm tra kết nối backend hoặc thử lại.');
+      }
     } finally {
       setTranslating(false);
     }
